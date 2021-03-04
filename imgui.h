@@ -194,8 +194,8 @@ typedef void* ImTextureID;          // User data for rendering backend to identi
 typedef unsigned int ImGuiID;       // A unique ID used by widgets, typically hashed from a stack of string.
 typedef int (*ImGuiInputTextCallback)(ImGuiInputTextCallbackData* data);    // Callback function for ImGui::InputText()
 typedef void (*ImGuiSizeCallback)(ImGuiSizeCallbackData* data);             // Callback function for ImGui::SetNextWindowSizeConstraints()
-typedef void* (ImGuiMemAllocFunc)(size_t sz, void* user_data);              // Function signature for ImGui::SetAllocatorFunctions()
-typedef void (ImGuiMemFreeFunc)(void* ptr, void* user_data);                // Function signature for ImGui::SetAllocatorFunctions()
+typedef void* (*ImGuiMemAllocFunc)(size_t sz, void* user_data);             // Function signature for ImGui::SetAllocatorFunctions()
+typedef void (*ImGuiMemFreeFunc)(void* ptr, void* user_data);               // Function signature for ImGui::SetAllocatorFunctions()
 
 // Character types
 // (we generally use UTF-8 encoded string in the API. This is storage specifically for a decoded character used for keyboard input and display)
@@ -875,8 +875,8 @@ namespace ImGui
     // - Those functions are not reliant on the current context.
     // - DLL users: heaps and globals are not shared across DLL boundaries! You will need to call SetCurrentContext() + SetAllocatorFunctions()
     //   for each static/DLL boundary you are calling from. Read "Context and Memory Allocators" section of imgui.cpp for more details.
-    IMGUI_API void          SetAllocatorFunctions(ImGuiMemAllocFunc* alloc_func, ImGuiMemFreeFunc* free_func, void* user_data = NULL);
-    IMGUI_API void          GetAllocatorFunctions(ImGuiMemAllocFunc** p_alloc_func, ImGuiMemFreeFunc** p_free_func, void** p_user_data);
+    IMGUI_API void          SetAllocatorFunctions(ImGuiMemAllocFunc alloc_func, ImGuiMemFreeFunc free_func, void* user_data = NULL);
+    IMGUI_API void          GetAllocatorFunctions(ImGuiMemAllocFunc* p_alloc_func, ImGuiMemFreeFunc* p_free_func, void** p_user_data);
     IMGUI_API void*         MemAlloc(size_t size);
     IMGUI_API void          MemFree(void* ptr);
 
@@ -2639,11 +2639,12 @@ struct ImFontAtlas
     //-------------------------------------------
 
     // You can request arbitrary rectangles to be packed into the atlas, for your own purposes.
-    // After calling Build(), you can query the rectangle position and render your pixels.
-    // You can also request your rectangles to be mapped as font glyph (given a font + Unicode point),
-    // so you can render e.g. custom colorful icons and use them as regular glyphs.
-    // Read docs/FONTS.md for more details about using colorful icons.
-    // Note: this API may be redesigned later in order to support multi-monitor varying DPI settings.
+    // - After calling Build(), you can query the rectangle position and render your pixels.
+    // - If you render colored output, set 'atlas->TexPixelsUseColors = true' as this may help some backends decide of prefered texture format.
+    // - You can also request your rectangles to be mapped as font glyph (given a font + Unicode point),
+    //   so you can render e.g. custom colorful icons and use them as regular glyphs.
+    // - Read docs/FONTS.md for more details about using colorful icons.
+    // - Note: this API may be redesigned later in order to support multi-monitor varying DPI settings.
     IMGUI_API int               AddCustomRectRegular(int width, int height);
     IMGUI_API int               AddCustomRectFontGlyph(ImFont* font, ImWchar id, int width, int height, float advance_x, const ImVec2& offset = ImVec2(0, 0));
     ImFontAtlasCustomRect*      GetCustomRectByIndex(int index) { IM_ASSERT(index >= 0); return &CustomRects[index]; }
@@ -2656,14 +2657,15 @@ struct ImFontAtlas
     // Members
     //-------------------------------------------
 
-    bool                        Locked;             // Marked as Locked by ImGui::NewFrame() so attempt to modify the atlas will assert.
     ImFontAtlasFlags            Flags;              // Build flags (see ImFontAtlasFlags_)
     ImTextureID                 TexID;              // User data to refer to the texture once it has been uploaded to user's graphic systems. It is passed back to you during rendering via the ImDrawCmd structure.
     int                         TexDesiredWidth;    // Texture width desired by user before Build(). Must be a power-of-two. If have many glyphs your graphics API have texture size restrictions you may want to increase texture width to decrease height.
     int                         TexGlyphPadding;    // Padding between glyphs within texture in pixels. Defaults to 1. If your rendering method doesn't rely on bilinear filtering you may set this to 0.
+    bool                        Locked;             // Marked as Locked by ImGui::NewFrame() so attempt to modify the atlas will assert.
 
     // [Internal]
     // NB: Access texture data via GetTexData*() calls! Which will setup a default font for you.
+    bool                        TexPixelsUseColors; // Tell whether our texture data is known to use colors (rather than just alpha channel), in order to help backend select a format.
     unsigned char*              TexPixelsAlpha8;    // 1 component per pixel, each component is unsigned 8-bit. Total size = TexWidth * TexHeight
     unsigned int*               TexPixelsRGBA32;    // 4 component per pixel, each component is unsigned 8-bit. Total size = TexWidth * TexHeight * 4
     int                         TexWidth;           // Texture width calculated during Build().
@@ -2765,7 +2767,7 @@ enum ImGuiViewportFlags_
 struct ImGuiViewport
 {
     ImGuiViewportFlags  Flags;                  // See ImGuiViewportFlags_
-    ImVec2              Pos;                    // Main Area: Position of the viewport (Dear Imgui coordinates are the same as OS desktop/native coordinates)
+    ImVec2              Pos;                    // Main Area: Position of the viewport (Dear ImGui coordinates are the same as OS desktop/native coordinates)
     ImVec2              Size;                   // Main Area: Size of the viewport.
     ImVec2              WorkPos;                // Work Area: Position of the viewport minus task bars, menus bars, status bars (>= Pos)
     ImVec2              WorkSize;               // Work Area: Size of the viewport minus task bars, menu bars, status bars (<= Size)
